@@ -1,0 +1,3 @@
+
+solana airdrop 5 mwcfgyGrw3N36bEVMZFJzWQkidk2hLjGAZmf2m91QWC  
+solana airdrop 5 7zJKWL1qBYYExf23hRrcojrWVZJcpEg4tSQNFmqJJFm9
