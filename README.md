@@ -1,89 +1,147 @@
-# Solana MEV Arbitrage Bot
-
-## Project Overview
-
-This project implements a real-time MEV arbitrage analyzer on Solana Devnet, designed to detect price inefficiencies across liquidity pools that trade the same asset pair. The system continuously monitors on-chain state changes, computes pool prices, and flags arbitrage-style MEV opportunities when meaningful price divergence appears.
-
-The goal is not only detection, but accurate simulation of real MEV conditions in a controlled environment.
-
-### Core Concept
-**Real-world scenario:**
-Pool A: SOL = 200 USDC (expensive)
-Pool B: SOL = 150 USDC (cheap)
-→ Buy low in Pool B, sell high in Pool A = Profit
+## ProgramId :  BLBysPbLSYXUjwXY3hJhjLqUwAJ8F3i6Yw7C2ZzA1otp
 
 
-### Devnet Simulation
-- Created **two SOL/USDC pools** under the same program ID
-- **Intentionally imbalanced** initial liquidity ratios  
-- After targeted transactions, price divergence occurs naturally
-- Creates **real MEV opportunities** for detection
+# Solana MEV Arbitrage Analyzer 
+
+A real-time MEV analyzer built on **Solana Devnet** to detect **arbitrage opportunities** caused by price imbalances across liquidity pools trading the same asset pair.
+
+---
+
+## Overview
+
+The system monitors two SOL/USDC pools under the same program ID and tracks their on-chain state changes. Both pools (Pool A and Pool B) start with the same initial liquidity, so SOL is priced identically in each market (this is a setup like , we can assume PoolA as Raydium and poolB as Orca)
+
+To simulate a real MEV scenario, a swap is intentionally executed in one of the pools, creating a price imbalance between Pool A and Pool B. Because the script is already listening for state changes, this swap immediately triggers a re-computation of prices in both pools. If the resulting price spread between them exceeds 1%, the system flags it as an arbitrage-style MEV opportunity.
+
+**Example:**
+- Pool A: 200 USDC / SOL
+- Pool B: 150 USDC / SOL  
+→ Buy in Pool B, sell in Pool A
+
+To enable deterministic testing, pools are intentionally initialized with imbalanced liquidity on Devnet.
+
+---
+## Pool Initialization
+
+Both liquidity pools are created using a **custom AMM program written in Rust with Anchor**.
+
+- Two independent SOL/USDC pools are initialized under the same program ID  
+- Each pool starts with identical SOL and USDC reserves  
+- This ensures both pools have the same initial price  
+- A controlled swap is later executed in one pool to introduce price divergence  
+
+This setup allows deterministic creation of MEV conditions on Devnet while keeping the system behavior realistic and reproducible.
+
+---
+## How It Works
+
+1. **Pool Discovery**  
+   Scans program transactions to dynamically identify SOL and USDC vault pairs.
+
+2. **Real-Time Monitoring**  
+   Uses WebSocket subscriptions (`onAccountChange`) to react instantly to vault balance updates.
+
+3. **Price Calculation**  
+   Computes prices using constant-product AMM math:  
+   `USDC per SOL = USDC_reserve / SOL_reserve`
+
+4. **Arbitrage Detection**  
+   Compares pool prices and flags opportunities when the spread exceeds a configurable threshold (default: 1%).
+
+---
 
 ## Features
-- Discovers liquidity pools by analyzing program transactions
-- WebSocket-based real-time vault balance monitoring
-- Calculates USDC/SOL prices using constant product AMM formula
-- Detects profitable arbitrage spreads across multiple pools
-- Production-grade async TypeScript implementation
+
+- Dynamic pool discovery (no hardcoded addresses)
+- Real-time ledger monitoring
+- Constant product AMM price calculation
+- Cross-pool arbitrage detection
+- Async, event-driven TypeScript design
+
+---## Demo: Real Arbitrage Detection
+
+### Initial Balanced State
+Both pools start with identical SOL/USDC pricing.
+
+<img width="800" height="500" alt="Initial Balanced Pools" src="https://github.com/user-attachments/assets/c60ebb78-d3ef-48f5-b3d8-ecdd58384af7" />
+
+### the script finds the pool in the chain , 
+the script is monitoring the states 
+
+<img width="700" height="400" alt="Swap Transaction" src="https://github.com/user-attachments/assets/d5e99baf-4e20-4e31-9b2c-ff57164b342d" />
+
+### Transaction Creates Imbalance
+script detects the state change , imbalance , ie. mev oppurtunity 
+Bot identifies 23.45% price spread and flags profitable trade.
+Spread: 23.45%
+Buy: WvtiBJAf.... at 324.0000 USDC/SOL
+Sell: 6PU2L3Mz.... at 400.0000 USDC/SOL
+Profit: 76.0000 USDC/SOL ( demo , liquidity is low )
+
+<img width="700" height="350" alt="Arbitrage Detected" src="https://github.com/user-attachments/assets/af6a67a8-cab4-401b-a9fc-84cbf131ddac" />
+
+Why Such Large Profits?
+1. **Devnet Low Liquidity**: 
+   - Pool A: 1 SOL / 324 USDC
+   - Pool B: 1 SOL / 400 USDC  
+   - Small reserves = massive % swings per swap
+
+2. **Intentionally Extreme Swap**:
+
+
+
+
+
+---
 
 ## Tech Stack
-TypeScript @solana/web3.js
-Helius RPC (WebSocket + HTTP) dotenv configuration
-Solana devnet deployment Map-based pool tracking
 
+- TypeScript – Real-time MEV analyzer and monitoring logic
 
-## Architecture
-1.discoverPools() → Scans program txs → Finds SOL/USDC vault pairs
-2.monitor() → WebSocket subscriptions on vault accounts
-3.checkPrices() → Calculates prices → Detects spreads > 1%
+- @solana/web3.js – Blockchain interaction and account subscriptions
 
+- Helius RPC (HTTP + WebSocket) – Low-latency block and account data
 
-## Results
-Detected 26.56% arbitrage spread between pools:
-Pool A (WvtiBJAf...): 324.0000 USDC/SOL
-Pool B (6PU2L3Mz...): 256.0000 USDC/SOL
-Profit potential: 68.0000 USDC per SOL traded
+- Solana Devnet – Testing and simulation environment
 
+- Rust + Anchor – Custom AMM pool program used to create and control test liquidity pools
 
-## Demo Output
-Found 24 transactions
-Checking prices
-WvtiBJAf...: 324.0000 USDC/SOL
-6PU2L3Mz...: 256.0000 USDC/SOL
-Spread: 26.56%
-ARBITRAGE OPPORTUNITY!
-Buy: 6PU2L3Mz... @ 256.0000
-Sell: WvtiBJAf... @ 324.0000
-Profit: 68.0000 USDC/SOL
+---
 
+## Project Structure
+```
+├── discoverPools.ts # Pool discovery via transaction analysis
+├── monitor.ts # WebSocket vault subscriptions
+├── checkPrices.ts # Price calculation + spread detection
+└── index.ts # Entry point
+```
 
+---
 
 ## Setup
+
 ```bash
-npm install @solana/web3.js dotenv typescript ts-node
+npm install
 cp .env.example .env
 npx tsc
 node dist/index.js
 ```
-Key Implementation Details
-Pool Discovery: getSignaturesForAddress() + preTokenBalances parsing
-Real-time Monitoring: onAccountChange("confirmed") commitment level
-Price Calculation: USDC_balance / SOL_balance = USDC_per_SOL
-Arbitrage Detection: Sort prices → Compare cheapest vs expensive (>1% spread)
+---
+## Future Work
 
-## Files
-```
-├── discoverPools.ts  # Transaction parsing + pool discovery
-├── monitor.ts        # WebSocket account change subscriptions
-├── checkPrices.ts    # Price calculation + arbitrage detection
-└── index.ts          # Main entry point
-```
+- Extend detection to **multi-pool and multi-hop arbitrage paths**
+- Add **backrun and sandwich pattern analysis**
+- Integrate **transaction simulation** to estimate execution profitability
 
-## Built By
-| Name        | Harshit Yadav                      |
-| ----------- | ---------------------------------- |
-| Education   | B.Tech Computer Science (3rd Year) |
-| Role        | Solana Blockchain Developer        |
-| Specialties | MEV, DeFi protocols, Anchor/Rust   |
-| Email       | harshityadav5499@gmail.com         |
-| X           | @Harshit_yad4v                     |
+---
+## Author
+
+- Harshit Yadav , 
+- Solana Blockchain Developer , 
+- Focus: MEV, DeFi systems, on-chain analysis
+- Email: harshityadav5499@gmail.com
+- X: @Harshit_yad4v
+
+
+
+
